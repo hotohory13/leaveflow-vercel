@@ -253,39 +253,55 @@ app.delete('/api/leaves/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// ----------------------------------------------------
-// Serve Frontend Static Files in Production
-// ----------------------------------------------------
+// Lazy DB initialization middleware for serverless environments (Vercel)
+let dbInitialized = false;
+app.use(async (req, res, next) => {
+  if (!dbInitialized) {
+    try {
+      await db.initialize();
+      dbInitialized = true;
+    } catch (err) {
+      console.error('Lazy DB initialization error:', err);
+    }
+  }
+  next();
+});
+
+// Serve Frontend Static Files in Production (Local / Docker)
 const clientBuildPath = path.join(__dirname, 'client', 'dist');
 app.use(express.static(clientBuildPath));
 
 app.get('*', (req, res) => {
-  // If request starts with /api, return 404 instead of serving HTML
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
   res.sendFile(path.join(clientBuildPath, 'index.html'), (err) => {
     if (err) {
-      // In development, if dist folder is not compiled yet, show a nice message
       res.status(200).send('API is running. Frontend build is missing (run client build to test production serving).');
     }
   });
 });
 
-// Start Server
-async function startServer() {
-  await db.initialize();
-  app.listen(PORT, () => {
-    console.log(`==================================================`);
-    console.log(` TA LEAVE TRACKER SERVER RUNNING`);
-    console.log(` Port: ${PORT}`);
-    console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(` Database: ${process.env.TURSO_DATABASE_URL ? 'Turso Cloud' : 'Local SQLite'}`);
-    console.log(`==================================================`);
+// Start Server locally if run directly
+if (require.main === module) {
+  async function startServer() {
+    await db.initialize();
+    dbInitialized = true;
+    app.listen(PORT, () => {
+      console.log(`==================================================`);
+      console.log(` TA LEAVE TRACKER SERVER RUNNING`);
+      console.log(` Port: ${PORT}`);
+      console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(` Database: ${process.env.TURSO_DATABASE_URL ? 'Turso Cloud' : 'Local SQLite'}`);
+      console.log(`==================================================`);
+    });
+  }
+
+  startServer().catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
   });
 }
 
-startServer().catch(err => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+module.exports = app;
+

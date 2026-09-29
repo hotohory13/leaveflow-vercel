@@ -14,6 +14,20 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_for_dev_mode';
 app.use(cors());
 app.use(express.json());
 
+// Lazy DB initialization middleware for serverless environments (Vercel)
+let dbInitialized = false;
+app.use(async (req, res, next) => {
+  if (!dbInitialized) {
+    try {
+      await db.initialize();
+      dbInitialized = true;
+    } catch (err) {
+      console.error('Lazy DB initialization error:', err);
+    }
+  }
+  next();
+});
+
 // Log requests in development
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
@@ -34,8 +48,8 @@ function authenticateToken(req, res, next) {
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+    if (err || !user || !user.id) {
+      return res.status(403).json({ error: 'Invalid or expired token. Please log in again.' });
     }
     req.user = user;
     next();
@@ -229,7 +243,10 @@ app.post('/api/leaves', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Add leave error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    if (error.message && (error.message.includes('UNIQUE') || error.message.includes('constraint'))) {
+      return res.status(400).json({ error: 'You have already recorded a leave on this date' });
+    }
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 
@@ -251,20 +268,6 @@ app.delete('/api/leaves/:id', authenticateToken, async (req, res) => {
     console.error('Delete leave error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
-
-// Lazy DB initialization middleware for serverless environments (Vercel)
-let dbInitialized = false;
-app.use(async (req, res, next) => {
-  if (!dbInitialized) {
-    try {
-      await db.initialize();
-      dbInitialized = true;
-    } catch (err) {
-      console.error('Lazy DB initialization error:', err);
-    }
-  }
-  next();
 });
 
 // Serve Frontend Static Files in Production (Local / Docker)

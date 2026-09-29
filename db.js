@@ -52,17 +52,23 @@ async function initializeDatabase() {
 // Wrapper to match the old API so server.js needs minimal changes
 const dbQueries = {
   async run(sql, params = []) {
-    const result = await db.execute({ sql, args: params });
-    return { id: Number(result.lastInsertRowid), changes: result.rowsAffected };
+    const cleanParams = params.map(p => (p === undefined ? null : p));
+    const result = await db.execute({ sql, args: cleanParams });
+    return {
+      id: result.lastInsertRowid != null ? Number(result.lastInsertRowid) : null,
+      changes: result.rowsAffected != null ? Number(result.rowsAffected) : 0
+    };
   },
 
   async get(sql, params = []) {
-    const result = await db.execute({ sql, args: params });
+    const cleanParams = params.map(p => (p === undefined ? null : p));
+    const result = await db.execute({ sql, args: cleanParams });
     return result.rows.length > 0 ? result.rows[0] : undefined;
   },
 
   async all(sql, params = []) {
-    const result = await db.execute({ sql, args: params });
+    const cleanParams = params.map(p => (p === undefined ? null : p));
+    const result = await db.execute({ sql, args: cleanParams });
     return result.rows;
   },
 

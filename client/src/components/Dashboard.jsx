@@ -248,6 +248,24 @@ export default function Dashboard({ user, token, onLogout, addToast }) {
     executeAddLeave('direct');
   };
 
+  const handleApiResponse = async (response, defaultErrorMsg) => {
+    if (response.status === 401 || response.status === 403) {
+      onLogout();
+      throw new Error('Session expired or invalid token. Please log in again.');
+    }
+    if (!response.ok) {
+      let msg = defaultErrorMsg;
+      try {
+        const data = await response.json();
+        msg = data.error || defaultErrorMsg;
+      } catch (e) {
+        // Not JSON
+      }
+      throw new Error(msg);
+    }
+    return response;
+  };
+
   const executeAddLeave = async (mode) => {
     setLoading(true);
     
@@ -271,10 +289,7 @@ export default function Dashboard({ user, token, onLogout, addToast }) {
             body: JSON.stringify(item)
           });
 
-          if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || `Failed to record leave on ${item.date}`);
-          }
+          await handleApiResponse(response, `Failed to record leave on ${item.date}`);
         }
         addToast('Recorded leaves for the selected day and weekend!', 'success');
       } 
@@ -284,11 +299,7 @@ export default function Dashboard({ user, token, onLogout, addToast }) {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
-
-        if (!delResponse.ok) {
-          const data = await delResponse.json();
-          throw new Error(data.error || 'Failed to remove old leave record');
-        }
+        await handleApiResponse(delResponse, 'Failed to remove old leave record');
 
         // 2. Insert new date leave
         const addResponse = await fetch(`${baseUrl}/api/leaves`, {
@@ -299,11 +310,7 @@ export default function Dashboard({ user, token, onLogout, addToast }) {
           },
           body: JSON.stringify({ date: weekendModalData.mainDate, type: leaveType, reason: reason })
         });
-
-        if (!addResponse.ok) {
-          const data = await addResponse.json();
-          throw new Error(data.error || 'Failed to record new leave');
-        }
+        await handleApiResponse(addResponse, 'Failed to record new leave');
 
         addToast(`Kept only ${weekendModalData.mainType} leave (deleted ${weekendModalData.otherType}).`, 'success');
       } 
@@ -321,10 +328,7 @@ export default function Dashboard({ user, token, onLogout, addToast }) {
           body: JSON.stringify({ date: selectedDate, type: leaveType, reason: reason })
         });
 
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || 'Failed to record leave');
-        }
+        await handleApiResponse(response, 'Failed to record leave');
         addToast('Leave recorded successfully!', 'success');
       }
 
@@ -350,11 +354,7 @@ export default function Dashboard({ user, token, onLogout, addToast }) {
         }
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete record');
-      }
-
+      await handleApiResponse(response, 'Failed to delete record');
       addToast('Leave record removed.', 'success');
       fetchLeaves();
     } catch (err) {

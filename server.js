@@ -270,6 +270,17 @@ app.delete('/api/leaves/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Global Express JSON error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error'
+  });
+});
+
 // Serve Frontend Static Files in Production (Local / Docker)
 const clientBuildPath = path.join(__dirname, 'client', 'dist');
 app.use(express.static(clientBuildPath));
